@@ -1,0 +1,10 @@
+#!/bin/zsh
+set -eu
+
+PROJECT_DIR=${0:A:h:h}
+EXECUTABLE="$PROJECT_DIR/.venv/bin/flomo-vault"
+if [[ ! -x "$EXECUTABLE" ]]; then
+  print -u2 "尚未安装。请先双击 install.command。"
+  exit 1
+fi
+exec "$EXECUTABLE" "$@"
