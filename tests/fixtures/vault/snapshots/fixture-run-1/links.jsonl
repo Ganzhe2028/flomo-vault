@@ -1,0 +1,7 @@
+{"link_id": 1, "kind": "memo", "source_memo_uid": "a", "target_memo_uid": "b", "target_url": "https://v.flomoapp.com/mine/?memo_id=b", "is_bidirectional": true}
+{"link_id": 2, "kind": "memo", "source_memo_uid": "b", "target_memo_uid": "a", "target_url": "https://v.flomoapp.com/mine/?memo_id=a", "is_bidirectional": true}
+{"link_id": 3, "kind": "memo", "source_memo_uid": "a", "target_memo_uid": "c", "target_url": "https://v.flomoapp.com/mine/?memo_id=c", "is_bidirectional": false}
+{"link_id": 4, "kind": "memo", "source_memo_uid": "d", "target_memo_uid": "a", "target_url": "https://v.flomoapp.com/mine/?memo_id=a", "is_bidirectional": false}
+{"link_id": 5, "kind": "memo", "source_memo_uid": "c", "target_memo_uid": "e", "target_url": "https://v.flomoapp.com/mine/?memo_id=e", "is_bidirectional": false}
+{"link_id": 6, "kind": "memo", "source_memo_uid": "a", "target_memo_uid": "deleted", "target_url": "https://v.flomoapp.com/mine/?memo_id=deleted", "is_bidirectional": false}
+{"link_id": 7, "kind": "external", "source_memo_uid": "a", "target_memo_uid": null, "target_url": "https://example.com", "is_bidirectional": false}

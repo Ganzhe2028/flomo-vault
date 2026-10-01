@@ -30,6 +30,46 @@ flomo-vault sync --since 2024-01-01 --media new --media-types image
 
 The installer creates a local virtual environment and registers a command plus the optional Codex skill. It does not configure Notion or install the daily schedule automatically.
 
+## Read-only MCP server
+
+The `flomo-vault-mcp` command exposes the published local vault to MCP clients over stdio. It reads the existing `current` snapshot and automatically follows a newly published snapshot on the next tool call. It never starts a sync or writes to the vault. Run `flomo-vault sync --media none` first if no vault exists.
+
+`install.command` installs the MCP SDK and links `flomo-vault-mcp` into `~/.local/bin`. A standard `pip install .` also installs the entry point. Find its absolute path with `command -v flomo-vault-mcp`; MCP clients may have a different `PATH` than your shell.
+
+By default, the server reads `~/Documents/Flomo Vault`. If you used `flomo-vault sync --vault /another/path`, set `FLOMO_VAULT_ROOT=/another/path` in the MCP server configuration. The path is the vault root that contains `current`, `snapshots`, and `media`.
+
+For Claude Code, replace the command path with the result of `command -v flomo-vault-mcp`:
+
+```bash
+claude mcp add --scope user --transport stdio flomo-vault -- /absolute/path/to/flomo-vault-mcp
+# With a custom vault root:
+claude mcp add --scope user --env FLOMO_VAULT_ROOT=/another/path --transport stdio flomo-vault -- /absolute/path/to/flomo-vault-mcp
+claude mcp get flomo-vault
+```
+
+For Codex, add this to `~/.codex/config.toml`, replacing the command path:
+
+```toml
+[mcp_servers.flomo-vault]
+command = "/absolute/path/to/flomo-vault-mcp"
+
+# Only needed for a nondefault vault root:
+[mcp_servers.flomo-vault.env]
+FLOMO_VAULT_ROOT = "/another/path"
+```
+
+| Tool | Purpose |
+| --- | --- |
+| `get_vault_status` | Check the published snapshot, scope, and sync status. |
+| `search_memos` | Search memo text with AND terms, dates, and a tag. |
+| `get_memo` | Read one memo with attachment paths and transcripts. |
+| `get_memo_context` | Read directed memo links up to two hops. |
+| `list_memos` | Browse memos by date and tag. |
+| `list_tags` | Count tags on active memos. |
+| `get_stats` | Summarize active memos, tags, links, and attachments. |
+
+Memo content tools hide deleted memos unless `include_deleted=true` is set. For `get_memo_context`, that option only applies to the center memo; neighbors always exclude deleted memos. `list_tags` and `get_stats` always count active memos. All statistics describe the current published snapshot, which may be date or attachment-type bounded; check `get_vault_status.selection` before treating counts as all-time totals. When an attachment has a valid `media_relpath`, its `local_path` resolves under the vault's `media` directory; check `download_status` before assuming the file exists.
+
 ## Optional Notion configuration
 
 Copy `config.example.json` to `~/.config/flomo-vault/config.json` and edit the dates and IDs for your own workspace. This file stays outside the repository. `daily_since` controls the local image/text range and read-only Notion comparison; `archive_since` controls the separate text-only archive. Empty Notion IDs disable those integrations.

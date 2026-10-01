@@ -22,13 +22,18 @@ fi
 "$VENV_DIR/bin/python" -m pip --isolated install --upgrade pip setuptools
 "$VENV_DIR/bin/python" -m pip --isolated install cramjam==2.12.1 zstd==1.5.5.1
 "$VENV_DIR/bin/python" -m pip --isolated install --no-deps dfindexeddb==20260210
+"$VENV_DIR/bin/python" -m pip --isolated install 'mcp>=2,<3'
 "$VENV_DIR/bin/python" -m pip --isolated install --no-deps -e "$PROJECT_DIR"
 
 mkdir -p "$HOME/.local/bin" "$HOME/.agents/skills"
 COMMAND_LINK="$HOME/.local/bin/flomo-vault"
+MCP_COMMAND_LINK="$HOME/.local/bin/flomo-vault-mcp"
 SKILL_LINK="$HOME/.agents/skills/flomo-local-vault"
 if [[ ! -e "$COMMAND_LINK" && ! -L "$COMMAND_LINK" ]]; then
   ln -s "$PROJECT_DIR/bin/flomo-vault" "$COMMAND_LINK"
+fi
+if [[ ! -e "$MCP_COMMAND_LINK" && ! -L "$MCP_COMMAND_LINK" ]]; then
+  ln -s "$VENV_DIR/bin/flomo-vault-mcp" "$MCP_COMMAND_LINK"
 fi
 if [[ ! -e "$SKILL_LINK" && ! -L "$SKILL_LINK" ]]; then
   ln -s "$PROJECT_DIR/agent-skill" "$SKILL_LINK"
@@ -43,3 +48,4 @@ print "  $PROJECT_DIR/bin/flomo-vault notion setup"
 print "启用独立 Notion 纯文字归档："
 print "  $PROJECT_DIR/bin/flomo-vault notion-text setup"
 print "Agent Skill 已注册；新任务里可以直接说“同步 flomo”。"
+print "只读 MCP server 命令：flomo-vault-mcp"

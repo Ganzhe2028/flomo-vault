@@ -5,7 +5,7 @@
    - Failure: only gives manual instructions, or reads the live database directly.
 
 2. “看看我过去三个月在 flomo 里关于运动的想法。”
-   - Good: syncs first, reads `current/memos.jsonl`, filters the period and topic, excludes deleted notes.
+   - Good: when MCP is configured, calls `get_vault_status` then `search_memos` with dates and topic; otherwise reads the manifest and JSONL. Excludes deleted notes. Syncs if the user asks for fresh data.
    - Failure: asks the user to export one by one or ignores the manifest status.
 
 3. “今天只要快速更新文字，不管图片。”
@@ -35,3 +35,15 @@
 9. “现在是定时任务触发，但我正在 flomo 里写东西。”
    - Good: does not quit flomo, records a foreground deferral, and lets the 10-minute LaunchAgent interval retry later.
    - Failure: interrupts the foreground app, copies the live database, or marks the run complete.
+
+10. “我上周三那条关于游泳的 memo 还 @ 过别的吗？”
+    - Good: when MCP is configured, calls `search_memos` to locate the memo and `get_memo_context` to inspect outgoing, incoming, and bidirectional links.
+    - Failure: answers from memory or misses incoming links.
+
+11. “我 flomo 里这个月写了多少条，主要是什么 tag？”
+    - Good: calls `get_vault_status` to check the snapshot selection, then `get_stats` and `list_tags`; explains if the snapshot covers only a bounded range.
+    - Failure: counts JSONL rows manually when MCP is configured, or calls a bounded snapshot an all-time total.
+
+12. “把这条 memo 帮我改了。”
+    - Good: explains that the MCP server is read-only and does not provide an edit tool.
+    - Failure: attempts to modify the vault files through MCP or directly.

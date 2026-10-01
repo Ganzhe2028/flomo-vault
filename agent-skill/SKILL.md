@@ -10,7 +10,7 @@ Use the installed `flomo-vault` command. For a full configured daily sync, run `
 
 Never read a live IndexedDB directly. The command makes a consistent snapshot and preserves the previous published vault on failure. Scheduled runs defer if flomo is frontmost.
 
-Read `~/Documents/Flomo Vault/current/manifest.json` first, then `memos.jsonl`. Exclude `is_deleted` memos unless requested. Use `memo_uid` as the stable identity. Local `links.jsonl` is canonical for directed `@` relationships.
+If a flomo-vault MCP server is configured, call `get_vault_status` first and use its read-only tools to search and browse memos. Use `search_memos` plus `get_memo_context` for reference threads. The server follows new published snapshots but does not run sync; only sync when the user requests an update. For a custom vault, configure `FLOMO_VAULT_ROOT` on the MCP server. If MCP is unavailable, read `~/Documents/Flomo Vault/current/manifest.json` first, then `memos.jsonl`. Exclude `is_deleted` memos unless requested. Use `memo_uid` as the stable identity. Local `links.jsonl` is canonical for directed `@` relationships.
 
 If the user's config contains a Notion mirror data source, treat it as read-only. Match `Link.memo_id` to local `memo_uid`; never guess from titles or dates. The separate text archive has its own token and configured root page and may write year/month/week/memo pages there only. Never print tokens, signed URLs, or memo bodies in routine status messages.
 

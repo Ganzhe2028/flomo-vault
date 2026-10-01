@@ -1,0 +1,2 @@
+{"attachment_id": "image-1", "memo_slug": "a", "index": 0, "type": "image", "name": "image.jpg", "size": 1, "seconds": null, "transcript": null, "remote_url": null, "media_relpath": "media/2026/09/image.jpg", "download_status": "ok", "memo_created_at": "2026-09-15 09:00:00"}
+{"attachment_id": "file-1", "memo_slug": "a", "index": 1, "type": "file", "name": "missing.pdf", "size": 10, "seconds": null, "transcript": null, "remote_url": null, "media_relpath": null, "download_status": "not_requested", "memo_created_at": "2026-09-15 09:00:00"}
