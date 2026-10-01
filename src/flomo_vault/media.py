@@ -195,6 +195,25 @@ def _extract_image(data: bytes, suffix: str) -> bytes | None:
     return None
 
 
+def _cache_matches(cache_root: Path, name: str):
+    """Find a filename in cache entries without depending on an external command."""
+    needle = name.encode("utf-8")
+    for directory, _, filenames in os.walk(cache_root):
+        for filename in filenames:
+            path = Path(directory) / filename
+            try:
+                with path.open("rb") as handle:
+                    overlap = b""
+                    while chunk := handle.read(1024 * 1024):
+                        data = overlap + chunk
+                        if needle in data:
+                            yield path
+                            break
+                        overlap = data[-(len(needle) - 1):] if len(needle) > 1 else b""
+            except OSError:
+                continue
+
+
 def _recover_image_from_cache(
     attachment: dict[str, Any],
     destination: Path,
@@ -203,18 +222,10 @@ def _recover_image_from_cache(
     name = attachment.get("name")
     if not isinstance(name, str) or not name or not cache_root.is_dir():
         return None
-    result = subprocess.run(
-        ["rg", "--files-with-matches", "--text", "--fixed-strings", "--max-count", "1", name, str(cache_root)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    if result.returncode not in {0, 1}:
-        return None
     expected = attachment.get("size")
-    for raw_path in result.stdout.decode(errors="replace").splitlines():
+    for path in _cache_matches(cache_root, name):
         try:
-            payload = _extract_image(Path(raw_path).read_bytes(), Path(name).suffix)
+            payload = _extract_image(path.read_bytes(), Path(name).suffix)
         except OSError:
             continue
         if not payload:

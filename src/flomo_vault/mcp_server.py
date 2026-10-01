@@ -8,15 +8,23 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server import MCPServer
+from pydantic import SkipValidation
+
+from . import __version__
 
 
 DEFAULT_VAULT = Path.home() / "Documents" / "Flomo Vault"
 PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 MAX_CONTEXT_MEMOS = 50
+# Preserve JSON schema hints while routing bad inputs through our structured errors.
+RawText = Annotated[str, SkipValidation()]
+RawOptionalText = Annotated[str | None, SkipValidation()]
+RawInt = Annotated[int, SkipValidation()]
+RawBool = Annotated[bool, SkipValidation()]
 
 
 def _error(code: str, message: str) -> dict[str, Any]:
@@ -53,7 +61,7 @@ class Snapshot:
 
 
 class VaultStore:
-    """Keep the last complete load and follow the published current symlink."""
+    """Follow current; published snapshots are immutable once their run_id is set."""
 
     def __init__(self, root: Path | None = None) -> None:
         configured = os.environ.get("FLOMO_VAULT_ROOT")
@@ -132,6 +140,12 @@ def _page(limit: int, offset: int) -> dict[str, Any] | None:
     return None
 
 
+def _filters(tag: str | None, include_deleted: bool) -> dict[str, Any] | None:
+    if (tag is not None and not isinstance(tag, str)) or type(include_deleted) is not bool:
+        return _error("invalid_param", "tag 必须为文字，include_deleted 必须为布尔值。")
+    return None
+
+
 def _dates(since: str | None, until: str | None) -> dict[str, Any] | None:
     try:
         for value in (since, until):
@@ -145,7 +159,7 @@ def _dates(since: str | None, until: str | None) -> dict[str, Any] | None:
 
 
 def _summary(memo: dict[str, Any]) -> dict[str, Any]:
-    return {key: memo.get(key) for key in ("memo_uid", "created_at", "tags", "body_markdown", "pin", "flomo_url")}
+    return {key: memo.get(key) for key in ("memo_uid", "created_at", "tags", "pin", "flomo_url")}
 
 
 def _context_summary(memo: dict[str, Any]) -> dict[str, Any]:
@@ -210,11 +224,12 @@ class VaultTools:
         return result
 
     def search_memos(
-        self, query: str, since: str | None = None, until: str | None = None, tag: str | None = None,
-        include_deleted: bool = False, limit: int = PAGE_SIZE, offset: int = 0,
+        self, query: RawOptionalText = None, since: RawOptionalText = None, until: RawOptionalText = None,
+        tag: RawOptionalText = None, include_deleted: RawBool = False,
+        limit: RawInt = PAGE_SIZE, offset: RawInt = 0,
     ) -> dict[str, Any]:
-        """Find memos by case-insensitive AND terms in plain text, with optional date and tag filters."""
-        problem = _page(limit, offset) or _dates(since, until)
+        """Find memo IDs by required query text, with optional date and exact-tag filters; use get_memo for full text."""
+        problem = _page(limit, offset) or _dates(since, until) or _filters(tag, include_deleted)
         if problem:
             return problem
         if not isinstance(query, str) or not query.split():
@@ -228,14 +243,14 @@ class VaultTools:
         return {**base, **_paginate([_summary(row) for row in _sorted_memos(rows)], limit, offset, "memos")}
 
     def list_memos(
-        self, since: str | None = None, until: str | None = None, tag: str | None = None,
-        include_deleted: bool = False, limit: int = PAGE_SIZE, offset: int = 0, order: str = "desc",
+        self, since: RawOptionalText = None, until: RawOptionalText = None, tag: RawOptionalText = None,
+        include_deleted: RawBool = False, limit: RawInt = PAGE_SIZE, offset: RawInt = 0, order: RawText = "desc",
     ) -> dict[str, Any]:
-        """Browse memo summaries by creation time, date range, and exact tag."""
-        problem = _page(limit, offset) or _dates(since, until)
+        """Browse memo IDs and metadata by creation time, date range, and exact tag; use get_memo for full text."""
+        problem = _page(limit, offset) or _dates(since, until) or _filters(tag, include_deleted)
         if problem:
             return problem
-        if order not in {"asc", "desc"}:
+        if not isinstance(order, str) or order not in {"asc", "desc"}:
             return _error("invalid_param", "order 只能是 asc 或 desc。")
         snapshot, base = self.store.current()
         if snapshot is None:
@@ -243,10 +258,12 @@ class VaultTools:
         rows = _sorted_memos(_filtered_memos(snapshot, since, until, tag, include_deleted), reverse=order == "desc")
         return {**base, **_paginate([_summary(row) for row in rows], limit, offset, "memos")}
 
-    def get_memo(self, memo_uid: str, include_deleted: bool = False) -> dict[str, Any]:
-        """Read one full memo and its attachment metadata, local paths, and transcripts."""
+    def get_memo(self, memo_uid: RawOptionalText = None, include_deleted: RawBool = False) -> dict[str, Any]:
+        """Read one memo by required memo_uid, including full text, attachment paths, and transcripts."""
         if not isinstance(memo_uid, str) or not memo_uid:
             return _error("invalid_param", "memo_uid 不能为空。")
+        if type(include_deleted) is not bool:
+            return _error("invalid_param", "include_deleted 必须为布尔值。")
         snapshot, base = self.store.current()
         if snapshot is None:
             return base
@@ -269,10 +286,14 @@ class VaultTools:
             attachments.append(item)
         return {**base, "memo": {**memo, "attachments": attachments}}
 
-    def get_memo_context(self, memo_uid: str, depth: int = 1, include_deleted: bool = False) -> dict[str, Any]:
-        """Read a memo and its directed references; depth 2 also lists unique second-hop neighbors."""
+    def get_memo_context(
+        self, memo_uid: RawOptionalText = None, depth: RawInt = 1, include_deleted: RawBool = False,
+    ) -> dict[str, Any]:
+        """Read directed references by required memo_uid; depth 2 also lists unique second-hop neighbors."""
         if not isinstance(memo_uid, str) or not memo_uid or type(depth) is not int or depth not in (1, 2):
             return _error("invalid_param", "memo_uid 不能为空，depth 只能是 1 或 2。")
+        if type(include_deleted) is not bool:
+            return _error("invalid_param", "include_deleted 必须为布尔值。")
         snapshot, base = self.store.current()
         if snapshot is None:
             return base
@@ -282,6 +303,18 @@ class VaultTools:
             return _error("memo_not_found", "找不到这条 memo，或它已删除。读取已删除中心 memo 可传 include_deleted: true。")
         active = {uid: row for uid, row in all_memos.items() if not row.get("is_deleted")}
         groups = self._neighbors(snapshot.links, memo_uid, active)
+        unavailable = {
+            direction: [
+                {
+                    "memo_uid": uid,
+                    "reason": "deleted" if uid in all_memos and uid not in active
+                    else "outside_snapshot" if uid not in all_memos else "missing_link",
+                }
+                for uid in sorted(set(center.get(f"{direction}_memo_uids") or []))
+                if uid not in groups[direction] and uid not in groups["bidirectional"]
+            ]
+            for direction in ("outgoing", "incoming")
+        }
         selected: set[str] = set()
         output: dict[str, list[dict[str, Any]]] = {key: [] for key in ("outgoing", "incoming", "bidirectional")}
         truncated = False
@@ -312,7 +345,10 @@ class VaultTools:
                     truncated = True
                     break
                 second_hop.append(found[uid])
-        return {**base, "center": center, **output, "second_hop": second_hop, "truncated": truncated}
+        return {
+            **base, "center": center, **output, "second_hop": second_hop,
+            "unavailable": unavailable, "truncated": truncated,
+        }
 
     @staticmethod
     def _neighbors(links: list[dict[str, Any]], uid: str, active: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
@@ -346,6 +382,9 @@ class VaultTools:
             month_index = today.year * 12 + today.month - 1 - ago
             months.append(f"{month_index // 12:04d}-{month_index % 12 + 1:02d}")
         month_counts = Counter(str(row.get("created_at") or "")[:7] for row in active)
+        excluded_months = {month: count for month, count in month_counts.items() if month not in months}
+        excluded_count = sum(excluded_months.values())
+        earliest_excluded = min((month for month in excluded_months if month), default=None)
         hour_counts = Counter(str(row.get("created_at") or "")[11:13] for row in active)
         tags: Counter[str] = Counter()
         for row in active:
@@ -361,6 +400,8 @@ class VaultTools:
             **base,
             "active_memos": len(active),
             "monthly_memos": [{"month": month, "count": month_counts[month]} for month in months],
+            "monthly_window_excluded_memos": excluded_count,
+            "earliest_excluded_month": earliest_excluded,
             "hourly_memos": [{"hour": hour, "count": hour_counts[f"{hour:02d}"]} for hour in range(24)],
             "top_tags": [{"name": tag, "memo_count": count} for tag, count in sorted(tags.items(), key=lambda pair: (-pair[1], pair[0]))[:20]],
             "relations": {"memo_edges": len(active_links), "bidirectional_pairs": len(pairs), "external_links": external},
@@ -369,6 +410,10 @@ class VaultTools:
         }
         if snapshot.manifest.get("selection"):
             result.setdefault("warnings", []).append("Stats cover only the selected vault snapshot, not all flomo memos.")
+        if excluded_count:
+            result.setdefault("warnings", []).append(
+                f"{excluded_count} active memo(s) fall outside the 24-month chart; earliest excluded month: {earliest_excluded or 'unknown'}."
+            )
         return result
 
 
@@ -376,6 +421,7 @@ def create_server(store: VaultStore | None = None) -> MCPServer:
     tools = VaultTools(store)
     server = MCPServer(
         "flomo-vault",
+        version=__version__,
         instructions="Read-only local flomo vault. Call get_vault_status first to check freshness and selection. "
         "Search and browse active memos with the other tools; pass include_deleted=true only when requested. "
         "No tool edits memos or triggers sync.",

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from mcp import Client, StdioServerParameters
 
+from flomo_vault import __version__
 from flomo_vault.mcp_server import VaultStore, VaultTools, create_server
 
 
@@ -90,6 +91,7 @@ class MCPServerTests(unittest.TestCase):
         self.assertEqual([row["memo_uid"] for row in context["outgoing"]], ["c"])
         self.assertEqual([row["memo_uid"] for row in context["incoming"]], ["d"])
         self.assertEqual([row["memo_uid"] for row in context["bidirectional"]], ["b"])
+        self.assertEqual(context["unavailable"]["outgoing"], [{"memo_uid": "deleted", "reason": "deleted"}])
         self.assertEqual(context["second_hop"], [])
         deep = self.tools.get_memo_context("a", depth=2)
         self.assertEqual([row["memo_uid"] for row in deep["second_hop"]], ["e"])
@@ -100,6 +102,33 @@ class MCPServerTests(unittest.TestCase):
         self.assertTrue(deleted_center["center"]["is_deleted"])
         self.assertEqual([row["memo_uid"] for row in deleted_center["incoming"]], ["a"])
         self.assertFalse(any(row["memo_uid"] == "deleted" for key in ("outgoing", "incoming", "bidirectional") for row in deep[key]))
+
+    def test_context_reports_references_outside_snapshot(self) -> None:
+        snapshot = self._snapshot_path()
+        memo_path = snapshot / "memos.jsonl"
+        rows = [json.loads(line) for line in memo_path.read_text(encoding="utf-8").splitlines()]
+        rows[0]["outgoing_memo_uids"].append("outside")
+        rows[0]["outgoing_memo_uids"].append("e")  # Present, but missing its link row.
+        memo_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        link_path = snapshot / "links.jsonl"
+        links = [json.loads(line) for line in link_path.read_text(encoding="utf-8").splitlines()]
+        links.append({"kind": "memo", "source_memo_uid": "a", "target_memo_uid": "outside"})
+        link_path.write_text("".join(json.dumps(row) + "\n" for row in links), encoding="utf-8")
+        manifest_path = snapshot / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["counts"]["links"] = len(links)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        context = self.tools.get_memo_context("a")
+        self.assertEqual(context["unavailable"]["outgoing"], [
+            {"memo_uid": "deleted", "reason": "deleted"},
+            {"memo_uid": "e", "reason": "missing_link"},
+            {"memo_uid": "outside", "reason": "outside_snapshot"},
+        ])
+        represented = {
+            row["memo_uid"] for key in ("outgoing", "bidirectional") for row in context[key]
+        } | {row["memo_uid"] for row in context["unavailable"]["outgoing"]}
+        self.assertEqual(represented, set(context["center"]["outgoing_memo_uids"]))
+        self.assertFalse(context["truncated"])
 
     def test_context_caps_unique_neighbors_at_fifty(self) -> None:
         snapshot = self._snapshot_path()
@@ -133,6 +162,38 @@ class MCPServerTests(unittest.TestCase):
         self.assertEqual(self.tools.list_memos(since="2026-02-30")["error"]["code"], "invalid_param")
         self.assertEqual(self.tools.get_memo_context("a", depth=3)["error"]["code"], "invalid_param")
         self.assertEqual(self.tools.get_memo("missing")["error"]["code"], "memo_not_found")
+
+    def test_stats_warn_when_older_memos_fall_outside_month_chart(self) -> None:
+        memo_path = self._snapshot_path() / "memos.jsonl"
+        rows = [json.loads(line) for line in memo_path.read_text(encoding="utf-8").splitlines()]
+        rows[0]["created_at"] = "2020-01-01 09:00:00"
+        memo_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        stats = self.tools.get_stats()
+        self.assertEqual(stats["active_memos"], 11)
+        self.assertEqual(sum(row["count"] for row in stats["monthly_memos"]), 10)
+        self.assertEqual(stats["monthly_window_excluded_memos"], 1)
+        self.assertEqual(stats["earliest_excluded_month"], "2020-01")
+        self.assertIn("1 active memo", stats["warnings"][0])
+
+    def test_search_and_list_do_not_return_full_bodies(self) -> None:
+        snapshot = self._snapshot_path()
+        memo_path = snapshot / "memos.jsonl"
+        template = json.loads(memo_path.read_text(encoding="utf-8").splitlines()[0])
+        rows = [
+            {**template, "memo_uid": f"long-{index:03d}", "slug": f"long-{index:03d}",
+             "body_text": "alpha " + "笔" * 5000, "body_markdown": "alpha " + "笔" * 5000}
+            for index in range(100)
+        ]
+        memo_path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+        manifest_path = snapshot / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["counts"]["memos"] = len(rows)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        for result in (self.tools.list_memos(limit=100), self.tools.search_memos("alpha", limit=100)):
+            self.assertEqual(result["total"], 100)
+            self.assertLess(len(json.dumps(result, ensure_ascii=False, indent=2).encode()), 25_000)
+            self.assertNotIn("body_markdown", result["memos"][0])
+        self.assertEqual(len(self.tools.get_memo("long-000")["memo"]["body_markdown"]), 5006)
 
     def test_mixed_timestamp_formats_sort_chronologically(self) -> None:
         path = self._snapshot_path() / "memos.jsonl"
@@ -278,6 +339,7 @@ class MCPServerTests(unittest.TestCase):
             env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
             params = StdioServerParameters(command=sys.executable, args=["-m", "flomo_vault.mcp_server"], env=env)
             async with Client(params) as client:
+                self.assertEqual(client.server_info.version, __version__)
                 names = {tool.name for tool in (await client.list_tools()).tools}
                 self.assertEqual(names, {"get_vault_status", "search_memos", "get_memo", "get_memo_context", "list_memos", "list_tags", "get_stats"})
                 calls = (
@@ -289,6 +351,15 @@ class MCPServerTests(unittest.TestCase):
                     result = await client.call_tool(name, args)
                     self.assertFalse(result.is_error, name)
                     self.assertTrue(result.structured_content["ok"], name)
+                invalid_calls = (
+                    ("list_memos", {"limit": 2.5}), ("list_memos", {"limit": "5"}),
+                    ("get_memo_context", {"memo_uid": "a", "depth": "2"}),
+                    ("search_memos", {"query": 5}), ("get_memo", {}),
+                )
+                for name, args in invalid_calls:
+                    result = await client.call_tool(name, args)
+                    self.assertFalse(result.is_error, (name, args))
+                    self.assertEqual(result.structured_content["error"]["code"], "invalid_param")
 
         asyncio.run(in_process())
         asyncio.run(stdio())

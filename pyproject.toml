@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flomo-local-vault"
-version = "0.2.0"
+version = "0.2.1"
 description = "Read-only local flomo vault exporter with deterministic Notion reconciliation"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
-dependencies = ["mcp>=2,<3"]
+dependencies = ["mcp>=2,<3", "pydantic>=2,<3"]
 
 [project.scripts]
 flomo-vault = "flomo_vault.cli:main"
