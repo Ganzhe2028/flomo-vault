@@ -1,10 +1,10 @@
-# 让 flomo 里的想法，随时找得回来
+# flomo Local Vault：搜索你的本地 flomo 笔记
 
 「上周写的游泳笔记里，我还提到了谁？」 「这个月我都在想什么？」
 
 如果你习惯往 flomo 里随手记，这些问题应该不用靠翻半天时间线来回答。flomo Local Vault 会从 Mac 上的 flomo 桌面端制作一致的本地快照，把笔记、标签、引用关系、历史版本和可选的附件整理进一个资料库。接上只读 MCP server 后，Claude Code、Codex 等支持 MCP 的 agent 就能直接搜索笔记、顺着 @ 关系往下读，也能查看本地附件的路径。
 
-资料库按次保存快照，新的同步发布后，MCP 会自动读到最新版。你也可以只导出文字，先把找笔记这件事跑通。
+资料库按次保存快照，默认保留最近 7 次；新的同步发布后，MCP 会自动读到最新版。你也可以先只同步文字，不下载附件文件。
 
 这是非官方的 macOS 工具。仓库里没有个人笔记、Notion 页面 ID 或凭据；它是一份独立的公开源码副本，不会替换你已有的本地安装。
 
@@ -24,7 +24,7 @@ MCP 只负责读已经发布的资料库，不会替你修改笔记，也不会�
 
 需要一台装有 `/Applications/flomo.app`、且已登录 flomo 桌面端的 Mac，以及 Python 3.11 或更新版本。附件会占用额外磁盘空间；只想先试文字，可以用 `--media none`。定时任务使用的 Helper 还需要一套可正常运行的 macOS Python 安装。
 
-双击 `install.command`，或者在终端运行它。安装后先检查环境，再做一次文字同步：
+双击 `install.command`，或者在终端运行它。安装后先检查环境，再做一次不下载附件的同步。如果终端找不到 `flomo-vault`，请在项目目录中把下列命令里的 `flomo-vault` 换成 `.venv/bin/flomo-vault`：
 
 ```bash
 flomo-vault doctor
@@ -38,7 +38,7 @@ flomo-vault status
 flomo-vault sync --since 2024-01-01 --media new --media-types image
 ```
 
-安装脚本会创建项目自己的虚拟环境，注册 `flomo-vault` 和 `flomo-vault-mcp` 命令，并链接可选的 agent skill。Notion 和每日定时任务需要你另行启用。
+安装脚本会创建项目自己的虚拟环境，在 `~/.local/bin` 为 `flomo-vault` 和 `flomo-vault-mcp` 创建命令链接，并链接可选的 agent skill。如果那里已经有同名文件或链接，安装脚本不会覆盖；请核对命令路径，必要时直接使用项目目录下 `.venv/bin` 中的命令。Notion 和每日定时任务需要你另行启用。
 
 flomo Local Vault 依赖桌面端当前的 IndexedDB 数据结构。flomo 更新后，如果底层格式变了，解析器也可能需要跟着调整。
 
@@ -48,7 +48,7 @@ flomo Local Vault 依赖桌面端当前的 IndexedDB 数据结构。flomo 更新
 
 已发布的快照按不可变文件使用。不要直接修改 `current` 里的 JSONL；需要更新笔记时，运行 `flomo-vault sync` 发布新快照。MCP 用快照路径和 `run_id` 判断是否需要重新加载。
 
-`install.command` 会安装 MCP SDK，并把命令链接到 `~/.local/bin`。如果你通过 `pip install .` 安装仓库，也会得到 `flomo-vault-mcp` 入口。先用 `command -v flomo-vault-mcp` 找到命令的绝对路径；如果终端找不到，就使用项目目录下的 `.venv/bin/flomo-vault-mcp`。MCP 客户端启动时的 `PATH` 可能和终端不同。
+`install.command` 会安装 MCP SDK，并尝试把命令链接到 `~/.local/bin`。如果你通过 `pip install .` 安装仓库，也会得到 `flomo-vault-mcp` 入口。先用 `command -v flomo-vault-mcp` 找到命令的绝对路径，并确认它指向本项目；如果终端找不到，就使用项目目录下的 `.venv/bin/flomo-vault-mcp`。MCP 客户端启动时的 `PATH` 可能和终端不同。
 
 ### Claude Code
 
@@ -103,7 +103,7 @@ FLOMO_VAULT_ROOT = "/another/path"
 
 接好 MCP 后，你可以像平时聊天一样提问。下面的笔记内容都是举例，换成你自己写过的词就行。
 
-1. **先看看资料库新不新。**「我现在读到的是哪次同步？覆盖了哪些日期？附件下载齐了吗？」agent 会调用 `get_vault_status`，看到快照时间、同步状态和 `selection`。准备做月度回顾时，先问这一句很值：它能提醒你当前资料库是否只包含某个时间段。
+1. **先看看资料库新不新。**「我现在读到的是哪次同步？覆盖了哪些日期？附件有没有失败或待处理？」agent 会调用 `get_vault_status`，看到快照时间、同步状态和 `selection`；附件未全部处理时还能看到提示。准备做月度回顾时，先问这一句：它能提醒你当前资料库是否只包含某个时间段。
 2. **从一个模糊印象捞回笔记。**「找找同时提到‘游泳’和‘肩膀’的笔记，只看去年、标签是‘运动’的。」`search_memos` 在正文里做不区分大小写的文字搜索；用空格隔开的词必须同时出现，还能按创建日期和标签筛选。结果按新到旧排列。
 3. **翻翻最近写过什么。**「按时间倒序给我最近 20 条笔记，再看下一页。」`list_memos` 适合随手浏览，也能只看某个日期范围或标签，或改成从旧到新。搜索和列表默认每页 20 条，单页最多 100 条；返回值会告诉你总数和后面还有没有。
 4. **把一条笔记读完整。**「打开刚才找到的那条，正文、原始 flomo 链接和附件都给我看看。」`get_memo` 返回完整笔记，还会带上附件名称、类型、下载状态、本地路径和已有的音频转写。只有路径还不等于文件已经下载，记得看 `download_status`。
@@ -124,14 +124,14 @@ FLOMO_VAULT_ROOT = "/another/path"
 
 **只读镜像校对：** 把 Notion data source ID 填入 `notion_data_source_id`，给连接授予 **Read content** 权限，然后运行 `flomo-vault notion setup`。Token 会在不回显输入后存入 macOS Keychain，不写进配置文件。镜像需要有 `Link`（URL）和 `Created At`（日期）字段。匹配只认 `Link.memo_id == local memo_uid`，不会拿标题或日期猜。
 
-**独立的纯文字归档：** 把目标根页面 ID 填入 `notion_text_root_page_id`，只向这棵页面树授权 **Read/Insert/Update content**，然后运行 `flomo-vault notion-text setup`。首次同步会建立空的本地映射；笔记页面按年、月、周归档。已有归档需要迁移时，才使用 `notion-text bootstrap` 和外部映射文件。
+**独立的纯文字归档：** 把目标根页面 ID 填入 `notion_text_root_page_id`，只向这棵页面树授权 **Read/Insert/Update content**，然后运行 `flomo-vault notion-text setup`。先完成一次本地同步，再运行 `flomo-vault notion-text sync`；首次归档会从空映射开始，并在写入页面时保存映射。笔记页面按年、月、周归档。已有归档需要迁移时，才使用 `notion-text bootstrap` 和外部映射文件。配置好以后，`daily` 也会执行归档。
 
 ```bash
 flomo-vault daily --json
 flomo-vault notion-text status --json
 ```
 
-`daily` 会先发布本地快照，再做 Notion 校对。Notion 数据缺失或暂时延迟，不会撤销已经成功的本地导出。退出码 `0` 表示完成或正常的镜像延迟；`2` 表示本地导出已完成，但附件或 Notion 仍需关注；`1` 表示本地导出失败，上一份 `current` 会保留。
+`daily` 会先发布本地快照，再做 Notion 校对和已配置的文字归档。Notion 数据缺失或暂时延迟，不会撤销已经成功的本地导出。退出码 `0` 表示完成或正常的镜像延迟；`2` 表示附件、Notion 或已有同步任务需要关注；`1` 表示流程失败。失败发生在发布快照之前时，上一份 `current` 会保留；请用 `flomo-vault status` 查看实际结果。
 
 ## 想每天自动更新？
 
@@ -144,6 +144,15 @@ flomo-vault notion-text status --json
 资料库里有你的私人笔记，不要把它提交到 Git，也不要作为 Issue 附件上传。仓库的 `.gitignore` 会忽略常见生成数据，但发布代码前仍要亲自检查 `git status`。Notion Token 保存在 Keychain；带签名的附件 URL 和访问 Token 不写入资料库。
 
 MCP server 本身只读，运行在本机。你让 agent 查询笔记时，返回的内容会进入所用客户端的上下文；是否继续发送给模型，取决于该客户端的工作方式。Notion 镜像连接只读；独立的文字归档只向你配置的根页面下写入。
+
+## 能力边界
+
+- **不能替你同步或改笔记。** MCP 没有新建、修改、删除、恢复、`refresh` 或 `sync` 工具，也不会去读正在运行的 flomo 数据库。刚写完但还没同步的内容，它看不到。
+- **不能凭意思猜出没写到的词。** `search_memos` 是文字子串匹配，多词按 AND 处理；它没有语义检索、向量搜索或相关性排序。
+- **不能读取或解析附件原始文件。** 它返回附件记录、下载状态、本地路径和资料库里已有的转写文本；没有图片识别或音频播放工具。文件没下载时，路径也不能当作可用文件。
+- **不能通过这七个工具检索历史版本或草稿，也不能操作 Notion。** 资料库虽然存有 `history.jsonl` 和 `drafts.jsonl`，MCP 暂未开放相应工具；Notion 校对与归档是另外配置的命令行功能。
+- **不能把有限范围的快照变成全量统计。** 如果同步时只选了某段日期，搜索和统计都只覆盖这份快照。`get_memo_context` 最多展开两层、返回 50 个邻居；它也不会在邻居列表中显示已删除笔记。
+- **不能保证查询内容只停留在本机。** MCP 进程在本机通过 stdio 运行，返回的笔记内容会交给你使用的客户端；客户端如何把内容送给模型，要看你自己的客户端设置。
 
 ## 运行测试
 
@@ -158,16 +167,3 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests
 ## 许可证
 
 Apache-2.0，见 [LICENSE](LICENSE)。
-
-## 边界：can / cannot do
-
-**Can do：** 读取当前已发布的本地快照；按文字、日期和标签找笔记；浏览全文与附件信息；追最多两层引用；统计未删除笔记。你明确要求时，也能读取快照中保留的已删除笔记。下一次 `flomo-vault sync` 发布新快照后，MCP 会在下一次调用时跟上。
-
-**Cannot do：**
-
-- **不能替你同步或改笔记。** MCP 没有新建、修改、删除、恢复、`refresh` 或 `sync` 工具，也不会去读正在运行的 flomo 数据库。刚写完但还没同步的内容，它看不到。
-- **不能凭意思猜出没写到的词。** `search_memos` 是文字子串匹配，多词按 AND 处理；它没有语义检索、向量搜索或相关性排序。
-- **不能读取或解析附件原始文件。** 它返回附件记录、下载状态、本地路径和资料库里已有的转写文本；没有图片识别或音频播放工具。文件没下载时，路径也不能当作可用文件。
-- **不能通过这七个工具检索历史版本或草稿，也不能操作 Notion。** 资料库虽然存有 `history.jsonl` 和 `drafts.jsonl`，MCP 暂未开放相应工具；Notion 校对与归档是另外配置的命令行功能。
-- **不能把有限范围的快照变成全量统计。** 如果同步时只选了某段日期，搜索和统计都只覆盖这份快照。`get_memo_context` 最多展开两层、返回 50 个邻居；它也不会在邻居列表中显示已删除笔记。
-- **不能保证查询内容只停留在本机。** MCP 进程在本机通过 stdio 运行，返回的笔记内容会交给你使用的客户端；客户端如何把内容送给模型，要看你自己的客户端设置。
