@@ -8,6 +8,14 @@
 
 这是非官方的 macOS 工具。仓库里没有个人笔记、Notion 页面 ID 或凭据；它是一份独立的公开源码副本，不会替换你已有的本地安装。
 
+## 第一次使用：让 agent 帮你装
+
+**在装有 flomo 桌面端的 Mac 上**，打开本机运行的 Codex 或 Claude Code，把下面这段话发给它。仓库地址是 [github.com/Ganzhe2028/flomo-vault](https://github.com/Ganzhe2028/flomo-vault)；目前提供源码安装，暂无 DMG。
+
+> 请帮我在这台 Mac 上安装 https://github.com/Ganzhe2028/flomo-vault 。先阅读仓库 README 和 install.command，确认已安装并登录 flomo 桌面端、Python 版本至少为 3.11。把项目下载到一个我不会随手删除的位置；若目标目录已有文件，先检查，别覆盖。运行 install.command，再执行 flomo-vault doctor、flomo-vault sync --media none 和 flomo-vault status。最后用本项目 flomo-vault-mcp 的绝对路径，帮我接入当前使用的 Codex 或 Claude Code，并确认能读取资料库状态。如果缺少前置条件或遇到报错，请告诉我具体卡在哪里。先不要下载附件、设置定时同步或配置 Notion。
+
+想自己安装：先[下载源码 ZIP](https://github.com/Ganzhe2028/flomo-vault/archive/refs/heads/main.zip)，解压后把文件夹放在固定位置，再按下方「[开始使用](#开始使用)」操作。安装命令会指向这个文件夹；之后移动或删除它，命令可能失效。网页里的聊天 AI 无法直接安装你 Mac 上的软件，需要使用能操作本机的 agent。
+
 ## 为什么做这个
 
 flomo 官方的 MCP 接口是 MAX 会员（299 元/年）的独占权益。这个项目提供另一条路：你的笔记数据本来就在自己电脑上，导出成本地资料库后接一个只读 MCP server，Claude Code、Codex 就能直接读。
